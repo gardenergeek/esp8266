@@ -48,28 +48,13 @@ SDK_LDDIR   = $(SDKBASE)/ld
 LIBS        = -lmain -lgcc -lfreertos -lnet80211 -lphy -lwpa -lcrypto -llwip -lpp -lminic -lhal
 #-lminic -lm -lgcc -lhal -lphy -lpp -lnet80211 -lwpa -lmain -lfreertos -llwip -lcrypto
 
-OBJ  = user_main.o fdvgpio.o fdvgpiomanager.o
+OBJ  = coregpio.o coregpiomanager.o
 
 SRCDIR = ./src/
 
-TARGET_OUT = app.out
+all: libcoregpio.a
 
-
-.PHONY: all flash clean flashweb flashdump flasherase
-
-
-all: $(TARGET_OUT)
-
-
-$(TARGET_OUT): libuser.a
-	$(LD) $(SDK_LIBDIR) -T$(SDK_LDDIR)/$(LD_SCRIPT) -Wl,-M >out.map $(LDFLAGS) -Wl,--start-group $(LIBS) libuser.a -Wl,--end-group -o $@
-	@$(OD) -h -j .data -j .rodata -j .bss -j .text -j .irom0.text $@
-	@$(OD) -t -j .text $@ >_text_content.map
-	@$(OD) -t -j .irom0.text $@ >_irom0_text_content.map
-	@$(ESPTOOL) elf2image $@
-
-
-libuser.a: $(OBJ)
+libcoregpio.a: $(OBJ)
 	$(AR) cru $@ $^
 	
 
@@ -79,22 +64,6 @@ libuser.a: $(OBJ)
 
 %.o: $(SRCDIR)%.cpp $(wildcard $(SRCDIR)*.h)
 	$(CC) $(CFLAGS) $(INCLUDES) -c $< -o $@
-
-
-flash:  $(TARGET_OUT)-0x00000.bin $(TARGET_OUT)-0x20000.bin
-	@-$(ESPTOOL) --port $(PORT) write_flash 0x00000 $(TARGET_OUT)-0x00000.bin 0x20000 $(TARGET_OUT)-0x20000.bin
-
-
-#flashweb:
-#	@python binarydir.py $(WEBDIR) webcontent.bin $(MAXWEBCONTENT)
-#	@-$(ESPTOOL) --port $(PORT) write_flash $(WEBCONTENTADDRS) webcontent.bin
-
-flashdump:
-	@-$(ESPTOOL) --port $(PORT) read_flash 0x0000 0x80000 flash.dump
-	@xxd flash.dump > flash.hex
-
-flasherase:
-	@-$(ESPTOOL) --port $(PORT) erase_flash
 	
 
 clean:

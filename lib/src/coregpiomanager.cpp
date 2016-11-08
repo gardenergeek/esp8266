@@ -21,7 +21,7 @@
 */
 
 
-#include "coregpiomanager.h"
+#include "coregpio.h"
 extern "C"
 {
 	#include "esp8266/pin_mux_register.h"

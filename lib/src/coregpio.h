@@ -37,11 +37,42 @@ extern "C"
 	#include "esp8266/ets_sys.h"	
 	#include "freertos/FreeRTOS.h"	
 }
-
-#include "coregpiomanager.h"
-
+#define GPIO_PIN_ADDR(i)        (GPIO_PIN0_ADDRESS + i*4)
 namespace core
 {	
+	typedef enum {
+		GPIO_PIN_INTR_DISABLE = 0,      /**< disable GPIO interrupt */
+		GPIO_PIN_INTR_POSEDGE = 1,      /**< GPIO interrupt type : rising edge */
+		GPIO_PIN_INTR_NEGEDGE = 2,      /**< GPIO interrupt type : falling edge */
+		GPIO_PIN_INTR_ANYEDGE = 3,      /**< GPIO interrupt type : bothe rising and falling edge */
+		GPIO_PIN_INTR_LOLEVEL = 4,      /**< GPIO interrupt type : low level */
+		GPIO_PIN_INTR_HILEVEL = 5       /**< GPIO interrupt type : high level */
+	} GPIO_INT_TYPE;
+	
+	typedef void (*GPIOIsr)();
+	
+	
+	class GPIOInterruptManager
+	{
+		
+    private:
+		GPIOIsr m_handlers[16];
+		GPIO_INT_TYPE m_state[16];
+        static uint32_t m_pinReg[16];
+		
+		GPIOInterruptManager();
+		void setInterruptStatus(int gpionum,GPIO_INT_TYPE mode);
+		bool isEnabledInterrupt();
+		
+		static void isr(void *);
+		static void intr_state_set(uint32 i, GPIO_INT_TYPE intr_state);
+		
+	public:		
+		void attachInterruptHandler(int gpionum,GPIOIsr handler,GPIO_INT_TYPE t);
+		void detachInterupptHandler(int gpionum);
+	
+		static GPIOInterruptManager Manager; 
+	};
 
 	//////////////////////////////////////////////////////////////////////////////////////////////////////
 	//////////////////////////////////////////////////////////////////////////////////////////////////////

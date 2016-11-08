@@ -5,7 +5,7 @@ extern "C"
 
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
-#include "gpio.h"
+
 extern void uart_div_modify(int,int);
 
 #define REG_WRITE(_r,_v)    (*(volatile uint32 *)(_r)) = (_v)
