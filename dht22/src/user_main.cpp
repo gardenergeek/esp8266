@@ -5,6 +5,7 @@ extern "C"
 
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "freertos/queue.h"
 
 extern void uart_div_modify(int,int);
 
@@ -16,7 +17,206 @@ extern void uart_div_modify(int,int);
 #define PIN 4
 
 #include "coregpio.h"
-core::GPIO gpio(4);
+
+
+//core::GPIO gpio(4);
+
+//
+// TODO: Snygga till
+// Fel detektering
+// konvertering
+// Checksumma m.m.
+
+#define BUFFLEN 50
+class Dht22
+{
+	
+private:
+	core::GPIO m_gpio;
+	int m_numIrqs;
+//	xQueueHandle m_q;
+	
+	bool m_lastFlankPositive;
+	uint32 m_positiveFlankStart;
+	
+	
+	unsigned char m_buffer[BUFFLEN];
+	int m_buffIdx;
+	bool m_buffOverflow;
+	
+public:
+	Dht22(int pinNumber):m_gpio(pinNumber)
+	{
+		m_numIrqs = 0;
+		m_buffIdx =0;
+//		m_q = NULL;
+	}
+	bool configure()
+	{
+/*		m_q = xQueueCreate(41,sizeof(unsigned char));
+		
+		if(m_q == NULL)
+		{
+			// TODO error handling
+			return false;
+		}
+*/			
+		// Configure io-pin, we use pullup to keep high, altough an input
+		m_gpio.modeInput();
+		m_gpio.enablePullUp(true);	// Pull pin high
+		
+		// Attach irq handler
+		m_gpio.attachInterruptHandler(Dht22::sharedIsr,this,core::GPIO_PIN_INTR_ANYEDGE);
+		
+		return true;
+	}
+	
+	bool read(int *humidity,int *temperature)
+	{
+		// Reset buss ..
+		wakeSensor();
+		
+		// .. and release the bus, so the sensor could drive it for data
+		m_gpio.modeInput();
+		
+		// Clear queue and irq state
+		clearIrqState();
+		
+		uint32 result = 0;
+		
+		while(true)
+		{
+			printf("Waiting");
+			vTaskDelay(5000 / portTICK_RATE_MS);
+			
+			for(int i = 0; i < m_buffIdx;i++)
+			{
+				printf("[%d] %d\n",i +1,m_buffer[i]);
+			}
+		}
+	/*	
+		
+		printf("Unqueueing");
+		for(int i = 0; i < 41;i++)
+		{
+			xQueueReceive(m_q,&result,1000);
+			printf("(%d) [%d] %d\n",m_numIrqs, i +1,result);
+		}
+*/		
+		vTaskDelay(5000 / portTICK_RATE_MS);
+		
+		*humidity = m_numIrqs;
+		
+		return true;
+	}
+	
+private:
+	void clearIrqState()
+	{
+		m_lastFlankPositive = false;
+		m_buffIdx = 0;
+		m_buffOverflow = false;
+//		xQueueReset(m_q);
+	}
+	void wakeSensor()
+	{
+		m_gpio.modeOutput();	
+		m_gpio.write(false);	
+		os_delay_us(20000);
+		
+		m_gpio.write(true);	// Issue "go" to sensor		
+		os_delay_us(40);	
+	}
+    void busyWait(uint32 micros)
+	{
+		uint32 startTs = WDEV_NOW();
+		
+		while( (WDEV_NOW() - startTs) < micros);
+	}
+	void isr()
+	{
+		if(m_gpio.read())
+		{
+			m_lastFlankPositive = true;
+			m_positiveFlankStart = WDEV_NOW();
+		}
+		else
+		{
+			m_lastFlankPositive = false;
+			uint32 t = (WDEV_NOW() - m_positiveFlankStart);
+			
+			if(m_buffIdx < BUFFLEN && t < 256)
+			{
+				m_buffer[m_buffIdx++] = t;
+			}
+			else
+			{
+				// Sorry, crap out ..
+				m_buffOverflow = true;
+			}
+			// 
+			// We borrow to calculated
+//			m_positiveFlankStart =(WDEV_NOW() - m_positiveFlankStart);
+//			portBASE_TYPE woken;
+			// We have a negative flank .. let them now
+//			portBASE_TYPE result = xQueueSendFromISR(m_q,&m_positiveFlankStart,&woken);
+		}
+		
+		
+		m_numIrqs++;
+	}
+	static void sharedIsr(void *instance)
+	{
+		((Dht22 *)instance)->isr();
+	}
+};
+
+Dht22 dht22(4);
+
+
+
+
+
+
+
+
+
+
+
+
+
+void helloTask(void *pvParameters)
+{
+	printf("Waiting\n");	
+	vTaskDelay(5000 / portTICK_RATE_MS);
+	printf("configure\n");
+	dht22.configure();
+	
+	printf("starting to read\n");	
+	int temp;
+	int hum;
+
+	if(dht22.read(&hum,&temp))
+	{
+		printf("Success %d\n",hum);			
+	}
+	else
+	{
+		printf("Failed\n");			
+	}
+
+	while(1);
+}
+
+
+
+
+
+
+
+
+
+/*
 
 int numints = 0;
 uint32 lastTs = 0;
@@ -64,9 +264,7 @@ unsigned char toByte(int *start)
 }
 
 
-/*
- * this task will read the uart and echo back all characters entered
- */
+ 
 void helloTask(void *pvParameters)
 {
 	gpio.modeInput();
@@ -144,7 +342,7 @@ void helloTask(void *pvParameters)
 	while(1);
 	
 }
-
+*/
 //
 //
 // Snyggab till initiering

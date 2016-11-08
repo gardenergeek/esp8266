@@ -49,7 +49,7 @@ namespace core
 		GPIO_PIN_INTR_HILEVEL = 5       /**< GPIO interrupt type : high level */
 	} GPIO_INT_TYPE;
 	
-	typedef void (*GPIOIsr)();
+	typedef void (*GPIOIsr)(void *);
 	
 	
 	class GPIOInterruptManager
@@ -57,6 +57,8 @@ namespace core
 		
     private:
 		GPIOIsr m_handlers[16];
+		void *m_handlerdata[16];
+		
 		GPIO_INT_TYPE m_state[16];
         static uint32_t m_pinReg[16];
 		
@@ -68,7 +70,7 @@ namespace core
 		static void intr_state_set(uint32 i, GPIO_INT_TYPE intr_state);
 		
 	public:		
-		void attachInterruptHandler(int gpionum,GPIOIsr handler,GPIO_INT_TYPE t);
+		void attachInterruptHandler(int gpionum,GPIOIsr handler,void *data,GPIO_INT_TYPE t);
 		void detachInterupptHandler(int gpionum);
 	
 		static GPIOInterruptManager Manager; 
@@ -159,7 +161,12 @@ namespace core
 		
 		void attachInterruptHandler(GPIOIsr handler,GPIO_INT_TYPE mode)
 		{
-			GPIOInterruptManager::Manager.attachInterruptHandler(m_gpioNum,handler,mode);
+			GPIOInterruptManager::Manager.attachInterruptHandler(m_gpioNum,handler,NULL,mode);
+		}
+		
+		void attachInterruptHandler(GPIOIsr handler,void *data,GPIO_INT_TYPE mode)
+		{
+			GPIOInterruptManager::Manager.attachInterruptHandler(m_gpioNum,handler,data,mode);
 		}
 		void detachInterupptHandler()
 		{

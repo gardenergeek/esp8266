@@ -50,6 +50,7 @@ namespace core
 		{
 			m_handlers[i] = NULL;
 			m_state[i] = GPIO_PIN_INTR_DISABLE;
+			m_handlerdata[i] = NULL;
 		}
 		
 		_xt_isr_attach(ETS_GPIO_INUM, (_xt_isr)isr,NULL);
@@ -77,7 +78,7 @@ namespace core
 			 // call func here
 		     if(GPIOInterruptManager::Manager.m_handlers[i] != NULL)
 			 {
-				 GPIOInterruptManager::Manager.m_handlers[i]();
+				 GPIOInterruptManager::Manager.m_handlers[i](GPIOInterruptManager::Manager.m_handlerdata[i]);
 			 }
 							
 			 //clear interrupt status
@@ -122,11 +123,11 @@ namespace core
 
 	   portEXIT_CRITICAL();
 	}
-	void GPIOInterruptManager::attachInterruptHandler(int gpionum,GPIOIsr handler,GPIO_INT_TYPE t)
+	void GPIOInterruptManager::attachInterruptHandler(int gpionum,GPIOIsr handler,void *data,GPIO_INT_TYPE t)
 	{
-		printf("Manager::atach(%d)",gpionum);
 		m_handlers[gpionum] = handler;
 		m_state[gpionum] = t;
+		m_handlerdata[gpionum] = data;
 		setInterruptStatus(gpionum,t);
 	}
 	
@@ -134,6 +135,7 @@ namespace core
 	{
 		m_handlers[gpionum] = NULL;
 		m_state[gpionum] = GPIO_PIN_INTR_DISABLE;
+		m_handlerdata[gpionum] = NULL;		
 		setInterruptStatus(gpionum,GPIO_PIN_INTR_DISABLE);		
 	}
 	
