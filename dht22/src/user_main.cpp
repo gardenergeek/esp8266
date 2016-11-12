@@ -9,242 +9,18 @@ extern "C"
 
 extern void uart_div_modify(int,int);
 
-#define REG_WRITE(_r,_v)    (*(volatile uint32 *)(_r)) = (_v)
-#define REG_READ(_r)        (*(volatile uint32 *)(_r))
-#define WDEV_NOW()          REG_READ(0x3ff20c00)
-
 }
-#define PIN 4
 
-#include "coregpio.h"
-
-
-typedef enum {
-	DHTOK = 0,				// Evrything fine
-	DHTERROR_NORESPONSE = 1,  // No response
-	DHTERROR_TIMEOUT = 2,  // Invalid timing of read values
-	DHTERROR_CHECKSUM = 3,
-	DHTERROR_RESAMPLING = 4, // Must be at least 2s between measurements 
-} DhtState;
-
-#define DATABITS 40
-class Dht22
-{
-	
-private:
-	core::GPIO m_gpio;
-	
-	bool m_lastValue;
-	uint32 m_positiveFlankStart;
-
-	int m_bitIdx;
-	bool m_gotResponseHigh;
-	DhtState m_state;
-	
-	unsigned char m_dataBuffer[DATABITS];
-	
-	uint32 m_lastReadTs;
-	
-public:
-	Dht22(int pinNumber):m_gpio(pinNumber)
-	{
-		clearReadState();
-		m_lastReadTs = 0;
-	}
-	bool configure()
-	{
-		// Configure io-pin, we use pullup to keep high, altough an input
-		m_gpio.modeInput();
-		m_gpio.enablePullUp(true);	// Pull pin high
-		
-		// Attach irq handler
-		m_gpio.attachInterruptHandler(Dht22::sharedIsr,this,core::GPIO_PIN_INTR_ANYEDGE);
-		
-		return true;
-	}
-	
-	bool read(int *humidity,int *temperature)
-	{
-		// Check so that at least 2s between samples
-		if(m_lastReadTs != 0 && 	// Never read
-		  (WDEV_NOW() - m_lastReadTs) < 2000000 &&	// Less than 2s
-		  WDEV_NOW() > m_lastReadTs) // Sanity check if RTC flipped around
-		{
-			m_state = DHTERROR_RESAMPLING;
-			return false;
-		}
-		
-		// Reset bus ..
-		wakeSensor();
-		
-		// .. and release the bus, so the sensor could drive it for data
-		m_gpio.modeInput();
-		
-		// clear our state
-		clearReadState();
-		
-		// Reasonable timout, 85+85 + 40*(55+75) + 55 = 170 + 5200 + 55 = 5425microsecons
-		// => 5.5ms, we are generous 20ms
-		vTaskDelay(20 / portTICK_RATE_MS);
-		
-		if(readingDone())
-		{
-			unsigned char hhumidity = toByte(&m_dataBuffer[0]);
-			unsigned char lhumidity= toByte(&m_dataBuffer[8]);	
-			unsigned char htemp= toByte(&m_dataBuffer[16]);
-			unsigned char ltemp= toByte(&m_dataBuffer[24]);	
-			unsigned char checksum= toByte(&m_dataBuffer[32]);
-			
-			unsigned char calculated = (hhumidity + lhumidity + htemp + ltemp) & 0x0FF;
-			
-			// Ok, lets check the check sum
-			if(calculated == checksum)
-			{
-				unsigned int hum = hhumidity<<8 | lhumidity;
-				unsigned int temp = (htemp<<8 | ltemp) & 0x00007ff;	// Mask sign bit
-				
-				*humidity = hum;
-				*temperature = temp*((htemp & 0x80)?-1:1);
-				
-				// Last read
-				m_lastReadTs = WDEV_NOW();				
-				return true;
-			}
-			m_state =DHTERROR_CHECKSUM;
-			return false;
-		}
-		else
-		{
-			// Check, error so that we could be more specific
-			if(m_bitIdx == 0)	// Nothing at all ...
-				m_state = DHTERROR_NORESPONSE;
-			else
-				m_state = DHTERROR_TIMEOUT;
-		}
-		return false;
-	}
-	
-	DhtState getLastResult()
-	{
-		return m_state;
-	}
-	
-	const char *getLastResultMessage()
-	{
-		switch(m_state)
-		{
-			case DHTOK :
-			return "OK";
-			
-			case DHTERROR_NORESPONSE :
-			return "No response";
-			
-			case DHTERROR_RESAMPLING :
-			return "Resampling, wait 2s";
-			
-			case DHTERROR_CHECKSUM :
-			return "CRC error";
-			
-			case DHTERROR_TIMEOUT :
-			return "Timeout error";
-		}
-		
-		return "Unknown error";
-	}
-private:
-	unsigned char toByte(unsigned char *start)
-	{
-		unsigned char result = 0;
-		unsigned char mask = 0x0080;
-		
-		for(int i = 0; i < 8;i++)
-		{
-			if(start[i] > 50)
-			{
-				result |= mask>>i;
-			}
-		}
-		return result;
-	}
-
-	bool readingDone()
-	{
-		return m_bitIdx == DATABITS;
-	}
-	
-	void clearReadState()
-	{
-		m_lastValue = false;
-		m_positiveFlankStart = 0;
-		m_bitIdx = 0;
-		m_state = DHTOK;
-		m_gotResponseHigh = false;
-	}
-	void wakeSensor()
-	{
-		// Drive bus low
-		m_gpio.modeOutput();	
-		
-		m_gpio.write(false);	
-		busyWait(20000);
-		
-		m_gpio.write(true);	// Issue "go" to sensor		
-		busyWait(40);
-	}
-    void busyWait(uint32 micros)
-	{
-		uint32 startTs = WDEV_NOW();
-		
-		while( (WDEV_NOW() - startTs) < micros);
-	}
-	void isr()
-	{
-		bool currentVal = m_gpio.read();
-		
-		if(!m_lastValue && currentVal)	// Positive flank
-		{
-			m_positiveFlankStart = WDEV_NOW();			
-		}
-		else if(m_lastValue && !currentVal)	// Negative flank
-		{
-			// have we recive start signal from sensor ..?
-			if(!m_gotResponseHigh)
-			{
-				// nope, then this must be responseHigh
-				m_gotResponseHigh = true;
-			}
-			else
-			{
-				// Data is flowing
-				if(m_bitIdx < DATABITS)
-				{
-					m_dataBuffer[m_bitIdx++] = (WDEV_NOW() - m_positiveFlankStart);
-				}
-			}			
-		}
-		m_lastValue = currentVal;
-		
-	}
-	static void sharedIsr(void *instance)
-	{
-		((Dht22 *)instance)->isr();
-	}
-};
-
+#include "dht.h"
 Dht22 dht22(4);
 
-
-
-
-
-
-
-
-
-
-
-
-
+void print(int v)
+{
+	int i = v/10;
+	int f = v % 10;
+	
+	printf("%d.%d",i,f);
+}
 void helloTask(void *pvParameters)
 {
 	printf("Waiting\n");	
@@ -256,25 +32,23 @@ void helloTask(void *pvParameters)
 	int temp;
 	int hum;
 
-	if(dht22.read(&hum,&temp))
+	while(1)
 	{
-		printf("Success %d %d\n",hum,temp);	
+		if(dht22.read(&hum,&temp))
+		{
+			printf("Success ");	
+			print(hum);
+			printf("%% ");
+			print(temp);
+			printf("C\n");
+		}
+		else
+		{
+			printf("Failed %s\n",dht22.getLastResultMessage());
+		}
+		
+		vTaskDelay(5000 / portTICK_RATE_MS);		
 	}
-	else
-	{
-		printf("Failed %s\n",dht22.getLastResultMessage());
-	}
-	
-	if(dht22.read(&hum,&temp))
-	{
-		printf("Success %d %d\n",hum,temp);	
-	}
-	else
-	{
-		printf("Failed %s\n",dht22.getLastResultMessage());
-	}
-
-	while(1);
 }
 
 

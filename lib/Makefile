@@ -48,7 +48,7 @@ SDK_LDDIR   = $(SDKBASE)/ld
 LIBS        = -lmain -lgcc -lfreertos -lnet80211 -lphy -lwpa -lcrypto -llwip -lpp -lminic -lhal
 #-lminic -lm -lgcc -lhal -lphy -lpp -lnet80211 -lwpa -lmain -lfreertos -llwip -lcrypto
 
-OBJ  = coregpio.o coregpiomanager.o
+OBJ  = coregpio.o coregpiomanager.o dht.o
 
 SRCDIR = ./src/
 
