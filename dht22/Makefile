@@ -33,7 +33,7 @@ CFLAGS   += -fno-exceptions
 
 # -fno-rtti
 #CFLAGS   += -fno-threadsafe-statics
-#CFLAGS   += -fno-use-cxa-atexit
+CFLAGS   += -fno-use-cxa-atexit
 
 LDFLAGS     = -nostdlib -Wl,--no-check-sections -u call_user_start -Wl,-static
 LDFLAGS    += -Wl,--gc-sections

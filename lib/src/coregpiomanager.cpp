@@ -65,7 +65,7 @@ namespace core
 		return false;
 	}
 	
-	void GPIOInterruptManager::isr(void *apa)
+	IRAM_ATTR void GPIOInterruptManager::isr(void *apa)
 	{
 		uint32_t gpio_status = GPIO_REG_READ(GPIO_STATUS_ADDRESS);
 
@@ -89,7 +89,7 @@ namespace core
 		  }
 	   }   
 	}
-	void GPIOInterruptManager::intr_state_set(uint32 i, GPIO_INT_TYPE intr_state)
+	IRAM_ATTR void GPIOInterruptManager::intr_state_set(uint32 i, GPIO_INT_TYPE intr_state)
 	{
 		uint32 pin_reg;
 

@@ -154,7 +154,7 @@ namespace core
 			GPIO_REG_WRITE(GPIO_OUT_W1TS_ADDRESS, 1 << m_gpioNum);
 		}
 		
-		bool read()
+		IRAM_ATTR bool read()
 		{
 			return (bool)((GPIO_REG_READ(GPIO_IN_ADDRESS) >> m_gpioNum) & 1);
 		}
