@@ -21,13 +21,12 @@ int32_t getLastError(int socket)
 	return r;
 }
 
-#include "dht.h"
-driver::Dht22 dht22(4);
-	
+void waitUntilIfReady()
+{
+	while(wifi_station_get_connect_status() != STATION_GOT_IP);
+}	
 void helloTask(void *pvParameters)
 {
-	printf("Hello\n");	
-	
 	struct station_config * config = (struct station_config *)zalloc(sizeof(struct station_config)); 	
 	
 	strcpy((char *)config->ssid, "dlink");	
@@ -37,9 +36,9 @@ void helloTask(void *pvParameters)
 	free(config);
 	wifi_station_connect();
 	
-	sockaddr_in m_remoteAddress;    // used by sendTo
-		
-	int socket = lwip_socket(AF_INET, SOCK_DGRAM, 0);
+	waitUntilIfReady();
+	
+	int socket = lwip_socket(AF_INET, SOCK_STREAM, 0);
 	
 	sockaddr_in localAddress     = {0};
 	
@@ -49,6 +48,7 @@ void helloTask(void *pvParameters)
 	localAddress.sin_port        = htons(60000);
 	lwip_bind(socket, (sockaddr*)&localAddress, sizeof(sockaddr_in));			
 	
+	printf("local bind:",getLastError(socket));
 	// Addr
 	in_addr_t a;
 
@@ -58,6 +58,7 @@ void helloTask(void *pvParameters)
 	((uint8_t*)&a)[3] = 106;
 	
 	
+	sockaddr_in m_remoteAddress;    // used by sendTo
 	
 	memset(&m_remoteAddress, 0, sizeof(sockaddr_in));
 	m_remoteAddress.sin_family      = AF_INET;
@@ -65,35 +66,21 @@ void helloTask(void *pvParameters)
 	m_remoteAddress.sin_addr.s_addr = a;
 	m_remoteAddress.sin_port        = htons(2000);
 	
+	
+	// Connect
+	lwip_connect(socket,(const sockaddr*)&m_remoteAddress,sizeof(sockaddr_in));
+	printf("connect:",getLastError(socket));	
+	
 	char rambuf[100];
 	memcpy(rambuf, "Hej",3);
-	
-
-	dht22.configure();
-	int temp;
-	int hum;
-	int len = 0;
 	
 	while(true)
 	{
 		printf("Waiting\n");
 		vTaskDelay(5000 / portTICK_RATE_MS);		
 		
-		if(dht22.read(&hum,&temp))
-		{
-			printf("Success ");	
-			
-			printf("Humidity: %d %% Temperature: %dC\n",hum,temp);
-			sprintf(rambuf,"Humidity: %d %% Temperature: %dC\n",hum,temp);
-			len = strlen(rambuf);
-		}
-		else
-		{
-			printf("Failed %s\n",dht22.getLastResultMessage());
-		}
-		
 		printf("Sending\n");
-		lwip_sendto(socket, rambuf, len, 0, (sockaddr*)&m_remoteAddress, sizeof(m_remoteAddress));		
+		lwip_send(socket, rambuf, 4, 0);		
 		
 		printf("Result:%u\n",getLastError(socket));
 	}
