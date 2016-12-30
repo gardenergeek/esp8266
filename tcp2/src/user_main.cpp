@@ -40,10 +40,35 @@ void initWifiDhcp()
 	waitUntilIfReady();
 }
 
+void initWifiStatic()
+{
+	struct station_config * config = (struct station_config *)zalloc(sizeof(struct station_config)); 	
+	
+	strcpy((char *)config->ssid, "dlink");	
+	strcpy((char *)config->password, "tannetorpet107");		
+	
+	wifi_station_set_config(config);
+	wifi_station_dhcpc_stop();
+	
+	ip_info info;
+	info.ip.addr      = ipaddr_addr("192.168.0.10");
+	info.netmask.addr = ipaddr_addr("255.255.255.0");
+	info.gw.addr      = ipaddr_addr("192.168.0.1");
+
+	wifi_set_ip_info((WIFI_INTERFACE)0x00,&info);
+	
+	free(config);
+	wifi_station_connect();
+}
+
 struct server_cb
 {
 	int socket;
 };
+void meminfo()
+{
+	system_print_meminfo();
+}
 
 bool readline(int socket,char *buf,int bufflen)
 {
@@ -114,6 +139,10 @@ void server(void *params)
 				{
 					done = true;					
 				}
+				else if(strcmp("m",rambuf) == 0)
+				{
+					meminfo();					
+				}
 				else
 				{
 					
@@ -130,10 +159,10 @@ void server(void *params)
 	printf("Exiting\n");	
 	vTaskDelete( NULL );
 }
-
 void helloTask(void *pvParameters)
 {
-	initWifiDhcp();
+//	initWifiDhcp();
+	initWifiStatic();
 	
 	int socket = lwip_socket(AF_INET, SOCK_STREAM, 0);
 	
